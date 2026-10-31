@@ -1,14 +1,14 @@
 // api/verify.js
 import { createClient } from '@supabase/supabase-js';
 
-// 1. مفاتيح الربط الخاصة بـ Supabase
-const SUPABASE_URL = 'https://vyvbbafipmmekjomeooa.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_Ghtz0f3Zp24yZ7b0NTlvFg_SDoOhQmA';
+// 1. قراءة المفاتيح بأمان من متغيرات البيئة (Environment Variables)
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://vyvbbafipmmekjomeooa.supabase.co';
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
 // 2. إعدادات Payhip المستقبلية
-const PAYHIP_API_KEY = '';
+const PAYHIP_API_KEY = process.env.PAYHIP_API_KEY || '';
 
 // 3. قاعدة بيانات الأسئلة السريّة
 const QUESTIONS_DATABASE = {
@@ -138,19 +138,18 @@ export default async function handler(req, res) {
   const cleanEmail = email.trim().toLowerCase();
 
   try {
-    // 1. الاستعلام المرن عن البريد لمنع رمي خطأ 500
-    const { data: allowedUser, error: dbError } = await supabase
+    // 1. الفحص المباشر لقاعدة البيانات عبر Supabase
+    const { data: allowedUsers, error: dbError } = await supabase
       .from('allowed_emails')
       .select('*')
       .eq('email', cleanEmail)
-      .eq('is_active', true)
-      .maybeSingle();
+      .eq('is_active', true);
 
     if (dbError) {
-      console.error("Supabase Database Error:", dbError);
+      console.error("Supabase Error:", dbError);
     }
 
-    if (allowedUser) {
+    if (allowedUsers && allowedUsers.length > 0) {
       return res.status(200).json({
         success: true,
         message: 'تم التحقق بنجاح!',
@@ -174,7 +173,7 @@ export default async function handler(req, res) {
       }
     }
 
-    // 3. البريد غير مسجل -> إرجاع كود 401 بدون أخطاء خادم
+    // 3. البريد غير مسجل -> إرجاع كود 401
     return res.status(401).json({
       success: false,
       message: 'عذراً، هذا البريد غير مصرح له بالدخول.',
