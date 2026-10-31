@@ -3,14 +3,14 @@ import { createClient } from '@supabase/supabase-js';
 
 // 1. مفاتيح الربط الخاصة بـ Supabase
 const SUPABASE_URL = 'https://vyvbbafipmmekjomeooa.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_Ghtz0f3Zp24yZ7b0NTlvFg_SDoOhQmA'; // المفتاح الخاص بك
+const SUPABASE_ANON_KEY = 'sb_publishable_Ghtz0f3Zp24yZ7b0NTlvFg_SDoOhQmA';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// 2. إعدادات Payhip المستقبلية (جاهزة للتفعيل بوضع المفتاح هنا لاحقاً)
-const PAYHIP_API_KEY = ''; // تضع هنا مفتاح Payhip API عندما تكون جاهزاً
+// 2. إعدادات Payhip المستقبلية
+const PAYHIP_API_KEY = '';
 
-// 3. قاعدة بيانات الأسئلة السريّة (محفوظة في السيرفر أوفلاين)
+// 3. قاعدة بيانات الأسئلة السريّة
 const QUESTIONS_DATABASE = {
   firstDew: [
     { id: "d1", mechanic: "NATURAL", text: "What’s the most dramatic change you’ve ever made to your appearance on impulse?" },
@@ -34,7 +34,6 @@ const QUESTIONS_DATABASE = {
     { id: "d19", specialMechanic: "PREDICT", text: "What do you think is this person’s absolute go-to excuse when they just want to cancel plans and stay home?" },
     { id: "d20", mechanic: "NATURAL", text: "In a social setting, what is a subtle sign that shows you’re having a genuinely good time, even if you’re being quiet?" }
   ],
-
   sunnyPaths: [
     { id: "s1", mechanic: "NATURAL", text: "What’s a small mistake you made that ended up leading to something unexpectedly good?" },
     { id: "s2", mechanic: "NATURAL", text: "What’s a time you pretended to be an expert on something you knew zero about, and then someone called your bluff in front of everyone?" },
@@ -57,7 +56,6 @@ const QUESTIONS_DATABASE = {
     { id: "s19", mechanic: "NATURAL", text: "What’s a time you accidentally spoiled a surprise party, gift, or secret way before you were supposed to?" },
     { id: "s20", mechanic: "NATURAL", text: "What’s a time you dropped everything and showed up in the middle of the night just to comfort someone?" }
   ],
-
   gentleBreeze: [
     { id: "g1", mechanic: "NATURAL", text: "What’s a skill you admire in others that you wish came more naturally to you?" },
     { id: "g2", mechanic: "NATURAL", text: "What is a privilege or advantage you have in life that you constantly remind yourself never to take for granted?" },
@@ -80,7 +78,6 @@ const QUESTIONS_DATABASE = {
     { id: "g19", mechanic: "NATURAL", text: "If you could watch yourself through someone else’s eyes for one ordinary day, whose perspective would you choose?" },
     { id: "g20", mechanic: "NATURAL", text: "What is a painful criticism someone gave you that you hated hearing at the time, but now respect them forever for being honest enough to say?" }
   ],
-
   sproutingIdeas: [
     { id: "sp1", mechanic: "NATURAL", text: "If a strange library contained an infinite book with every decision you almost made and the parallel life that followed, which single crossroad would you be terrified, yet desperate to read about?" },
     { id: "sp2", mechanic: "NATURAL", text: "If you could give every person in the world one shared piece of understanding overnight, what would it be?" },
@@ -103,7 +100,6 @@ const QUESTIONS_DATABASE = {
     { id: "sp19", specialMechanic: "WHO SAID THAT", text: "What’s a debate or topic where you genuinely see both sides so clearly that you can never pick one?" },
     { id: "sp20", specialMechanic: "MOST LIKELY TO", text: "Who here seems like they have the most unconventional, outside-the-box perspective on everyday situations?" }
   ],
-
   fullBloom: [
     { id: "b1", mechanic: "NATURAL", text: "If you had to trade lives with someone in this room for a week, whose life would bring the most fun and surprises?" },
     { id: "b2", mechanic: "NATURAL", text: "What’s a time your gut feeling told you 'something is off here', and your crazy detective instinct turned out to be 100% spot on?" },
@@ -139,14 +135,20 @@ export default async function handler(req, res) {
     return res.status(400).json({ success: false, message: 'يرجى إدخال البريد الإلكتروني.' });
   }
 
+  const cleanEmail = email.trim().toLowerCase();
+
   try {
-    // 1. الفحص الأول: هل الإيميل مسجل ومفعل في Supabase؟ (الوصول المجاني الخاص بك)
-    const { data: allowedUser } = await supabase
+    // 1. الاستعلام المرن عن البريد لمنع رمي خطأ 500
+    const { data: allowedUser, error: dbError } = await supabase
       .from('allowed_emails')
       .select('*')
-      .eq('email', email.trim().toLowerCase())
+      .eq('email', cleanEmail)
       .eq('is_active', true)
-      .single();
+      .maybeSingle();
+
+    if (dbError) {
+      console.error("Supabase Database Error:", dbError);
+    }
 
     if (allowedUser) {
       return res.status(200).json({
@@ -156,14 +158,14 @@ export default async function handler(req, res) {
       });
     }
 
-    // 2. الفحص الثاني: جاهز لـ Payhip API في المستقل (إذا وضعنا المفتاح وأدخل العميل المفتاح)
+    // 2. التحقق المستقبلي عبر Payhip API
     if (PAYHIP_API_KEY && licenseKey) {
       const payhipRes = await fetch(`https://payhip.com/api/v2/license/verify?license_key=${licenseKey}`, {
         headers: { 'payhip-api-key': PAYHIP_API_KEY }
       });
       const payhipData = await payhipRes.json();
 
-      if (payhipData.success && payhipData.data.buyer_email.toLowerCase() === email.trim().toLowerCase()) {
+      if (payhipData.success && payhipData.data.buyer_email.toLowerCase() === cleanEmail) {
         return res.status(200).json({
           success: true,
           message: 'تم التحقق من الشراء بنجاح عبر Payhip!',
@@ -172,7 +174,7 @@ export default async function handler(req, res) {
       }
     }
 
-    // 3. إذا لم يمر من أي شرط، يرجع رابط الشراء الخاص بك
+    // 3. البريد غير مسجل -> إرجاع كود 401 بدون أخطاء خادم
     return res.status(401).json({
       success: false,
       message: 'عذراً، هذا البريد غير مصرح له بالدخول.',
@@ -180,6 +182,7 @@ export default async function handler(req, res) {
     });
 
   } catch (err) {
-    return res.status(500).json({ success: false, message: 'حدث خطأ في الخادم.' });
+    console.error("Server Handler Error:", err);
+    return res.status(500).json({ success: false, message: 'حدث خطأ في الخادم أثناء الفحص.' });
   }
 }
