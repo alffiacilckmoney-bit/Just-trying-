@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Alfiria - Realm of Cards</title>
+  
+  <!-- مكتبة html2canvas لالتقاط الشاشة مثل الكاميرا -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+  <!-- تحسين الاتصال بخوادم الخطوط مسبقاً -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  
+  <!-- استدعاء خفيف ومركّز: Cinzel للعناوين، Quicksand للنصوص، و Playfair Display المائل للأسئلة -->
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Playfair+Display:ital,wght@1,600&family=Quicksand:wght@600&display=swap" rel="stylesheet">
+  
+  <!-- ملف التنسيقات الخارجي -->
+  <link rel="stylesheet" href="./style.css?v=1">
+
+  <style>
+    /* تطبيق خط السؤال المائل الأنيق كما في الصورة تماماً */
+    .card-question {
+      font-family: 'Playfair Display', Georgia, serif !important;
+      font-style: italic !important;
+      font-weight: 600 !important;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- الشاشة الرئيسية: الخريطة -->
+  <div id="blossom-island-screen">
+    <!-- تنبيه فشل تحميل الخريطة وضعف الإنترنت -->
+    <div id="map-network-error" style="display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 600; background: rgba(14, 20, 28, 0.95); border: 1.5px solid #e2c08d; border-radius: 16px; padding: 20px 24px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.8); max-width: 90vw;">
+      <p style="color: #fce8cd; font-family: 'Cinzel', serif; font-size: 0.95rem; margin-bottom: 14px;">Weak connection. Unable to load the island map.</p>
+      <button class="stone-btn" onclick="location.reload()" style="padding: 8px 20px; font-size: 0.85rem;">Retry Connection</button>
+    </div>
+
+    <div id="horizontal-progress-container" class="horizontal-progress-wrapper">
+      <div class="progress-bar-label"><span id="progress-percent-text">0%</span></div>
+      <div class="progress-bar-track">
+        <div id="progress-bar-fill" class="progress-bar-fill"></div>
+      </div>
+    </div>
+
+    <!-- زر وقائمة الخيارات -->
+    <div class="island-menu-container">
+      <button class="island-menu-btn" onclick="toggleIslandMenu()" aria-label="Island Menu">
+        <span></span><span></span><span></span>
+      </button>
+      <div id="island-menu-dropdown" class="island-menu-dropdown">
+        <button onclick="returnToWorldMap()">Back to Map</button>
+        <button onclick="openPlayersModal(); closeIslandMenu();">Setup Players</button>
+        <button class="danger-btn" onclick="confirmResetIsland()">Reset Progress</button>
+      </div>
+    </div>
+
+    <!-- خريطة الصخور التفاعلية الخمسة (فك تشفير غير متزامن لتخفيف المعالج) -->
+    <div id="blossom-container">
+      <img id="blossom-map-img" 
+           decoding="async"
+           src="https://res.cloudinary.com/qc0aowwf/image/upload/f_auto,q_auto,w_1920/v1786495008/high_quality_2K_202608120102_1_1.jpg" 
+           alt="Blossom Island Level Map" 
+           onerror="document.getElementById('map-network-error').style.display='block'">
+      <div id="rock-step-1" class="rock-node active" onclick="handleNodeClick(1)">1</div>
+      <div id="rock-step-2" class="rock-node locked" onclick="handleNodeClick(2)">2</div>
+      <div id="rock-step-3" class="rock-node locked" onclick="handleNodeClick(3)">3</div>
+      <div id="rock-step-4" class="rock-node locked" onclick="handleNodeClick(4)">4</div>
+      <div id="rock-step-5" class="rock-node locked" onclick="handleNodeClick(5)">5</div>
+    </div>
+  </div>
+
+  <!-- نافذة تسجيل اللاعبين -->
+  <div id="players-modal" class="modal-overlay">
+    <div class="parchment-scroll">
+      <button class="modal-close-corner-btn" onclick="closePlayersModal()">✕</button>
+      <h2 class="scroll-title">GATHER YOUR PARTY</h2>
+      <p style="font-size: 0.92rem; color: #73505e; margin-bottom: 12px; font-weight: 500;">Add 3–6 players to begin</p>
+      <div id="players-error-msg"></div>
+      <div class="players-inputs-grid" id="players-list-container"></div>
+      <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+        <button class="stone-btn secondary btn-small" onclick="addPlayerField()">+ Add</button>
+        <button class="stone-btn secondary btn-small" onclick="removePlayerField()">- Remove</button>
+      </div>
+      <div class="button-group">
+        <button class="stone-btn" onclick="savePlayersAndContinue()">CONTINUE</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- نافذة تنبيه الصخرة المقفلة (إغلاق آمن بدون استدعاءات مفقودة) -->
+  <div id="level-intro-modal" class="modal-overlay">
+    <div class="parchment-scroll">
+      <button class="modal-close-corner-btn" onclick="closeLevelIntroModal()">✕</button>
+      <h2 class="scroll-title">PATH LOCKED</h2>
+      <div class="scroll-text-container" style="margin-bottom: 0;">
+        <p>Complete the previous stages first to unlock it</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- نافذة الكروت العادية والإنترو الأساسي -->
+  <div id="card-modal" class="modal-overlay">
+    <div class="card-modal-wrapper">
+      <div class="card-scene">
+        <div id="active-card" class="game-card" data-card-id="" data-stage-id="">
+          <div class="card-header-row">
+            <button class="card-header-btn" onclick="closeCardModal()" title="Close">✕</button>
+            <div class="card-header-center">
+              <span id="card-mechanic-tag" class="card-mechanic-badge"></span>                       
+            </div>
+            <button class="card-header-btn" onclick="shareCardImage()" title="Share Card">↗</button>
+          </div>
+          <div id="card-question-text" class="card-question"></div>
+          <div class="card-footer">
+            <div id="card-number-tag" class="card-number-display">Intro</div>
+            <div class="card-nav-row">
+              <span id="prev-arrow" class="nav-arrow" onclick="prevCard()">&lt; </span>
+              <span id="next-arrow" class="nav-arrow" onclick="nextCard()"> &gt;</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- نافذة الميكانيكيات الخاصة المعزولة -->
+  <div id="predict-modal" class="predict-overlay">
+    <div id="predict-interactive-box" class="predict-box">
+      <div id="predict-content" style="width: 100%; display: flex; flex-direction: column; justify-content: space-between; flex: 1;"></div>
+    </div>
+  </div>
+
+  <!-- نافذة تأكيد التصفير -->
+  <div id="reset-confirm-modal" class="modal-overlay">
+    <div class="parchment-scroll">
+      <button class="modal-close-corner-btn" onclick="closeResetConfirm()">✕</button>
+      <h2 class="scroll-title">RESET PROGRESS</h2>
+      <div class="scroll-text-container">
+        <p>This will erase your completed stages and start Blossom Island completely from the beginning</p>
+        <p style="font-weight: 700; color: #c93b58; margin-top: 8px;">Are you sure you want to proceed?</p>
+      </div>
+      <div class="button-group">
+        <button class="stone-btn" onclick="resetIslandProgress()">RESET</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- نافذة الاحتفاليات والمايلستونز (مع الحاوية المعرفة بشكل مطابق لكود المحرك) -->
+  <div id="island-completion-modal" class="modal-overlay">
+    <div id="confetti-container"></div>
+    <div class="parchment-scroll">
+      <h2 class="scroll-title">STAGE COMPLETE! 🌸</h2>
+      <div id="completion-text" class="scroll-text-container" style="margin-top: 15px;"></div>
+      <div id="completion-actions-container" class="button-group" style="gap: 12px; display: flex; width: 100%;">
+        <button class="exit-btn" onclick="returnToWorldMap()" style="flex: 1; padding: 12px 0;">EXIT</button>
+        <button id="completion-continue-btn" class="stone-btn" onclick="startNewReplayRound()" style="flex: 1; padding: 12px 0;">CONTINUE</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>
