@@ -1,16 +1,7 @@
-// api/verify.js
+// functions/api/verify.js
 import { createClient } from '@supabase/supabase-js';
 
-// 1. قراءة المفاتيح بأمان من متغيرات البيئة (Environment Variables)
-const SUPABASE_URL = process.env.SUPABASE_URL || 'https://vyvbbafipmmekjomeooa.supabase.co';
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
-
-// 2. إعدادات Payhip المستقبلية
-const PAYHIP_API_KEY = process.env.PAYHIP_API_KEY || '';
-
-// 3. قاعدة بيانات الأسئلة السريّة
+// قاعدة بيانات الأسئلة السريّة (كاملة دون تعديل)
 const QUESTIONS_DATABASE = {
   firstDew: [
     { id: "d1", mechanic: "NATURAL", text: "What’s the most dramatic change you’ve ever made to your appearance on impulse?" },
@@ -124,25 +115,43 @@ const QUESTIONS_DATABASE = {
   ]
 };
 
-export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ message: 'طلب غير مسموح' });
-  }
-
-  const { email, licenseKey } = req.body;
-
-  if (!email) {
-    return res.status(400).json({ success: false, message: 'يرجى إدخال البريد الإلكتروني.' });
-  }
-
-  const cleanEmail = email.trim().toLowerCase();
+export async function onRequestPost(context) {
+  const { request, env } = context;
 
   try {
-    // 1. الفحص المباشر لقاعدة البيانات عبر Supabase
+    const body = await request.json();
+    const email = body.email ? body.email.trim().toLowerCase() : "";
+    const licenseKey = body.licenseKey;
+
+    if (!email) {
+      return new Response(JSON.stringify({ success: false, message: 'يرجى إدخال البريد الإلكتروني.' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json; charset=utf-8' }
+      });
+    }
+
+    // قراءة المفاتيح فقط من بيئة Cloudflare دون أي قيم افتراضية مكشوفة
+    const SUPABASE_URL = env.SUPABASE_URL || 'https://vyvbbafipmmekjomeooa.supabase.co';
+    const SUPABASE_SERVICE_KEY = env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SERVICE_KEY;
+    const PAYHIP_API_KEY = env.PAYHIP_API_KEY || '';
+
+    if (!SUPABASE_SERVICE_KEY) {
+      return new Response(JSON.stringify({
+        success: false,
+        message: 'خطأ في إعدادات الخادم: لم يتم العثور على مفتاح الخدمة.'
+      }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json; charset=utf-8' }
+      });
+    }
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+
+    // الفحص المباشر لقاعدة البيانات عبر Supabase
     const { data: allowedUsers, error: dbError } = await supabase
       .from('allowed_emails')
       .select('*')
-      .eq('email', cleanEmail)
+      .ilike('email', email)
       .eq('is_active', true);
 
     if (dbError) {
@@ -150,38 +159,50 @@ export default async function handler(req, res) {
     }
 
     if (allowedUsers && allowedUsers.length > 0) {
-      return res.status(200).json({
+      return new Response(JSON.stringify({
         success: true,
         message: 'تم التحقق بنجاح!',
         questions: QUESTIONS_DATABASE
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json; charset=utf-8' }
       });
     }
 
-    // 2. التحقق المستقبلي عبر Payhip API
+    // التحقق المستقبلي عبر Payhip API
     if (PAYHIP_API_KEY && licenseKey) {
       const payhipRes = await fetch(`https://payhip.com/api/v2/license/verify?license_key=${licenseKey}`, {
         headers: { 'payhip-api-key': PAYHIP_API_KEY }
       });
       const payhipData = await payhipRes.json();
 
-      if (payhipData.success && payhipData.data.buyer_email.toLowerCase() === cleanEmail) {
-        return res.status(200).json({
+      if (payhipData.success && payhipData.data.buyer_email.toLowerCase() === email) {
+        return new Response(JSON.stringify({
           success: true,
           message: 'تم التحقق من الشراء بنجاح عبر Payhip!',
           questions: QUESTIONS_DATABASE
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json; charset=utf-8' }
         });
       }
     }
 
-    // 3. البريد غير مسجل -> إرجاع كود 401
-    return res.status(401).json({
+    // البريد غير مسجل
+    return new Response(JSON.stringify({
       success: false,
       message: 'عذراً، هذا البريد غير مصرح له بالدخول.',
       buyUrl: 'https://payhip.com/b/r6sSo'
+    }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json; charset=utf-8' }
     });
 
   } catch (err) {
     console.error("Server Handler Error:", err);
-    return res.status(500).json({ success: false, message: 'حدث خطأ في الخادم أثناء الفحص.' });
+    return res || new Response(JSON.stringify({ success: false, message: 'حدث خطأ في الخادم أثناء الفحص.' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json; charset=utf-8' }
+    });
   }
 }
