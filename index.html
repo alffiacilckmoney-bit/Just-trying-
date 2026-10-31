@@ -507,16 +507,30 @@
 
   <!-- سكربت التحكم بالخريطة والدخول -->
   <script>
+    // 🔄 عند كتابة أو تعديل الإيميل: إرجاع زر UNLOCK وإخفاء رسالة المتجر فوراً
+    document.addEventListener("DOMContentLoaded", () => {
+      const emailInput = document.getElementById("user-email-input");
+      if (emailInput) {
+        emailInput.addEventListener("input", () => {
+          const unlockBtn = document.getElementById("lock-submit-btn");
+          const errorDiv = document.getElementById("lock-screen-error");
+          
+          if (unlockBtn) unlockBtn.style.display = "block";
+          if (errorDiv) errorDiv.innerHTML = "";
+        });
+      }
+    });
+
     // 🔒 دالة التحقق من البريد عبر السيرفر الخفي
     async function handleLoginSubmit() {
       const emailInput = document.getElementById("user-email-input");
       const errorDiv = document.getElementById("lock-screen-error");
       const unlockBtn = document.getElementById("lock-submit-btn");
-      const email = emailInput ? emailInput.value.trim() : "";
+      const email = emailInput ? emailInput.value.trim().toLowerCase() : "";
 
       if (!email) {
         if (errorDiv) {
-          errorDiv.innerHTML = "<p style='color: #a04050; font-size: 0.78rem; font-weight: 600;'>Please enter your email </p>";
+          errorDiv.innerHTML = "<p style='color: #a04050; font-size: 0.78rem; font-weight: 600;'>Please enter your email !!</p>";
         }
         return;
       }
@@ -540,14 +554,13 @@
           // إخفاء شاشة القفل وتأكيد الوصول
           document.getElementById("lock-screen-modal").style.display = "none";
         } else {
-          // 🙈 إخفاء زر UNLOCK عند عدم وجود البريد في القائمة
+          // 🙈 إخفاء زر UNLOCK وإظهار بطاقة دعوة الشراء
           if (unlockBtn) unlockBtn.style.display = "none";
 
-          // 🌟 بطاقة دعوة الشراء الأنيقة بدلاً من رسالة الخطأ
           errorDiv.innerHTML = `
             <div class="buy-invite-box">
               <div class="buy-invite-text">
-                Hmm, this email hasn't joined the game yet <br>Grab your pass below to enter the realm!
+                Hmm, this email hasn't joined the game yet <br>Grab your pass below to enter the realm!!
               </div>
               <a href="${data.buyUrl || 'https://payhip.com/b/r6sSo'}" target="_blank" class="payhip-gold-btn">
                 GET YOUR GAME PASS ↗
@@ -556,7 +569,6 @@
           `;
         }
       } catch (err) {
-        // 🙈 إخفاء زر UNLOCK في حالة عدم العثور على الإيميل
         if (unlockBtn) unlockBtn.style.display = "none";
 
         if (errorDiv) {
